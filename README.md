@@ -1,6 +1,6 @@
 # RealIP
 
-[![GoDoc](https://godoc.org/github.com/tomasen/realip?status.svg)](http://godoc.org/github.com/tomasen/realip)
+[![GoDoc](https://godoc.org/github.com/defabricated/realip?status.svg)](http://godoc.org/github.com/defabricated/realip)
 
 Go package that can be used to get client's real public IP, which usually useful for logging HTTP server.
 
@@ -9,13 +9,14 @@ Go package that can be used to get client's real public IP, which usually useful
 * Follows the rule of X-Real-IP
 * Follows the rule of X-Forwarded-For
 * Exclude local or private address
+* Exclude CloudFlare or own proxy server address
 
 ## Examples
 
 ```go
 package main
 
-import "github.com/tomasen/realip"
+import "github.com/defabricated/realip"
 
 func (h *Handler) ServeIndexPage(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	clientIP := realip.FromRequest(r)
@@ -28,7 +29,7 @@ You can also pass multiple CIDR blocks which are blocks of your proxies.
 ```go
 package main
 
-import "github.com/tomasen/realip"
+import "github.com/defabricated/realip"
 
 func (h *Handler) ServeIndexPage(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	clientIP := realip.FromRequest(r, net.ParseCIDR("169.254.0.0/16"))
