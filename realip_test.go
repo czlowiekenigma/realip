@@ -40,6 +40,33 @@ func TestIsPrivateAddr(t *testing.T) {
 	}
 }
 
+func TestIsCloudFlareAddr(t *testing.T) {
+	testData := map[string]bool{
+		"188.114.96.0": true,
+		"131.0.75.155": true,
+
+		"188.114.95.0": false,
+		"131.0.76.125": false,
+	}
+
+	for addr, isLocal := range testData {
+		isPrivate, err := isCloudFlareAddress(addr)
+		if err != nil {
+			t.Errorf("fail processing %s: %v", addr, err)
+		}
+
+		if isPrivate != isLocal {
+			format := "%s should "
+			if !isLocal {
+				format += "not "
+			}
+			format += "be local address"
+
+			t.Errorf(format, addr)
+		}
+	}
+}
+
 func TestRealIP(t *testing.T) {
 	// Create type and function for testing
 	type testIP struct {
@@ -64,6 +91,8 @@ func TestRealIP(t *testing.T) {
 	// Create test data
 	publicAddr1 := "144.12.54.87"
 	publicAddr2 := "119.14.55.11"
+	spoofedAddr := "83.142.61.55"
+	cloudFlareAddr := "162.158.89.3"
 	localAddr := "127.0.0.0"
 
 	testData := []testIP{
@@ -82,6 +111,18 @@ func TestRealIP(t *testing.T) {
 		}, {
 			name:     "Has X-Real-IP",
 			request:  newRequest("", publicAddr1),
+			expected: publicAddr1,
+		}, {
+			name:     "IP spoofing",
+			request:  newRequest(publicAddr1, "", spoofedAddr),
+			expected: publicAddr1,
+		}, {
+			name:     "Using CloudFlare",
+			request:  newRequest(cloudFlareAddr, "", publicAddr1),
+			expected: publicAddr1,
+		}, {
+			name:     "IP Spoofing with CloudFlare",
+			request:  newRequest(cloudFlareAddr, "", spoofedAddr, publicAddr1),
 			expected: publicAddr1,
 		},
 	}

@@ -7,7 +7,8 @@ import (
 	"strings"
 )
 
-var cidrs []*net.IPNet
+var privateCidrs []*net.IPNet
+var cloudFlareCidrs []*net.IPNet
 
 func init() {
 	maxCidrBlocks := []string{
@@ -21,11 +22,34 @@ func init() {
 		"fe80::/10",      // link local address IPv6
 	}
 
-	cidrs = make([]*net.IPNet, len(maxCidrBlocks))
-	for i, maxCidrBlock := range maxCidrBlocks {
-		_, cidr, _ := net.ParseCIDR(maxCidrBlock)
+	cloudFlareCidrBlocks := []string{
+		"103.21.244.0/22",
+		"103.22.200.0/22",
+		"103.31.4.0/22",
+		"104.16.0.0/12",
+		"108.162.192.0/18",
+		"131.0.72.0/22",
+		"141.101.64.0/18",
+		"162.158.0.0/15",
+		"172.64.0.0/13",
+		"173.245.48.0/20",
+		"188.114.96.0/20",
+		"190.93.240.0/20",
+		"197.234.240.0/22",
+		"198.41.128.0/17",
+	}
+
+	privateCidrs = parseCidrs(maxCidrBlocks)
+	cloudFlareCidrs = parseCidrs(cloudFlareCidrBlocks)
+}
+
+func parseCidrs(raw []string) (cidrs []*net.IPNet) {
+	cidrs = make([]*net.IPNet, len(raw))
+	for i, block := range raw {
+		_, cidr, _ := net.ParseCIDR(block)
 		cidrs[i] = cidr
 	}
+	return
 }
 
 // isLocalAddress works by checking if the address is under private CIDR blocks.
@@ -35,13 +59,24 @@ func init() {
 //
 // https://en.wikipedia.org/wiki/Link-local_address
 func isPrivateAddress(address string) (bool, error) {
+	return isUnderCIDRBlocks(address, privateCidrs)
+}
+
+// isCloudFlareAddress checks if the IP address is under CIDR blocks provided by CloudFlare.
+// List of CloudFlare's CIDR blocks can be seen on:
+// https://www.cloudflare.com/ips-v4
+func isCloudFlareAddress(address string) (bool, error) {
+	return isUnderCIDRBlocks(address, cloudFlareCidrs)
+}
+
+func isUnderCIDRBlocks(address string, blocks []*net.IPNet) (bool, error) {
 	ipAddress := net.ParseIP(address)
 	if ipAddress == nil {
 		return false, errors.New("address is not valid")
 	}
 
-	for i := range cidrs {
-		if cidrs[i].Contains(ipAddress) {
+	for i := range blocks {
+		if blocks[i].Contains(ipAddress) {
 			return true, nil
 		}
 	}
@@ -50,37 +85,56 @@ func isPrivateAddress(address string) (bool, error) {
 }
 
 // FromRequest return client's real public IP address from http request headers.
-func FromRequest(r *http.Request) string {
+func FromRequest(r *http.Request, trustedProxies... *net.IPNet) string {
 	// Fetch header value
 	xRealIP := r.Header.Get("X-Real-Ip")
 	xForwardedFor := r.Header.Get("X-Forwarded-For")
 
-	// If both empty, return IP from remote address
-	if xRealIP == "" && xForwardedFor == "" {
-		var remoteIP string
-
-		// If there are colon in remote address, remove the port number
-		// otherwise, return remote address as is
-		if strings.ContainsRune(r.RemoteAddr, ':') {
-			remoteIP, _, _ = net.SplitHostPort(r.RemoteAddr)
-		} else {
-			remoteIP = r.RemoteAddr
-		}
-
+	// If there are colon in remote address, remove the port number
+	// otherwise, return remote address as is
+	var remoteIP string
+	if strings.ContainsRune(r.RemoteAddr, ':') {
+		remoteIP, _, _ = net.SplitHostPort(r.RemoteAddr)
+	} else {
+		remoteIP = r.RemoteAddr
+	}
+	isPrivate, err := isPrivateAddress(remoteIP)
+	isCloudFlare, err := isCloudFlareAddress(remoteIP)
+	isProxy, err := isUnderCIDRBlocks(remoteIP, trustedProxies)
+	if !isPrivate && !isCloudFlare && !isProxy && err == nil {
 		return remoteIP
 	}
 
-	// Check list of IP in X-Forwarded-For and return the first global address
-	for _, address := range strings.Split(xForwardedFor, ",") {
-		address = strings.TrimSpace(address)
-		isPrivate, err := isPrivateAddress(address)
-		if !isPrivate && err == nil {
-			return address
+	// Try to get IP address from X-Forwarded-For header
+	if xForwardedFor != "" {
+		forwardedForIps := strings.Split(xForwardedFor, ",")
+
+		// Check a inverted list of IP adresses in X-Forwarded-For and return the first global address which is not an IP adress of one of trusted proxy
+		// By iterating a inverted list prevent IP spoofing
+		for i := len(forwardedForIps) - 1; i >= 0; i-- {
+			address := strings.TrimSpace(forwardedForIps[i])
+			isPrivate, err := isPrivateAddress(address)
+			isCloudFlare, err := isCloudFlareAddress(address)
+			isProxy, err := isUnderCIDRBlocks(address, trustedProxies)
+			if !isPrivate && !isCloudFlare && !isProxy && err == nil {
+				return address
+			}
 		}
 	}
 
-	// If nothing succeed, return X-Real-IP
-	return xRealIP
+	// Try to get IP address from X-Real-IP header
+	xRealIP = strings.TrimSpace(xRealIP)
+	if xRealIP != "" {
+		isPrivate, err := isPrivateAddress(xRealIP)
+		isCloudFlare, err := isCloudFlareAddress(xRealIP)
+		isProxy, err := isUnderCIDRBlocks(xRealIP, trustedProxies)
+		if !isPrivate && !isCloudFlare && !isProxy && err == nil {
+			return xRealIP
+		}
+	}
+
+	// If nothing succeed, just return remote address
+	return remoteIP
 }
 
 // RealIP is depreciated, use FromRequest instead

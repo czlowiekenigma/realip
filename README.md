@@ -10,7 +10,7 @@ Go package that can be used to get client's real public IP, which usually useful
 * Follows the rule of X-Forwarded-For
 * Exclude local or private address
 
-## Example
+## Examples
 
 ```go
 package main
@@ -19,6 +19,19 @@ import "github.com/tomasen/realip"
 
 func (h *Handler) ServeIndexPage(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	clientIP := realip.FromRequest(r)
+	log.Println("GET / from", clientIP)
+}
+```
+
+You can also pass multiple CIDR blocks which are blocks of your proxies.
+
+```go
+package main
+
+import "github.com/tomasen/realip"
+
+func (h *Handler) ServeIndexPage(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	clientIP := realip.FromRequest(r, net.ParseCIDR("169.254.0.0/16"))
 	log.Println("GET / from", clientIP)
 }
 ```
