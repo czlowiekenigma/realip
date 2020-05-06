@@ -16,7 +16,7 @@ Go package that can be used to get client's real public IP, which usually useful
 ```go
 package main
 
-import "github.com/defabricated/realip"
+import "github.com/czlowiekenigma/realip"
 
 func (h *Handler) ServeIndexPage(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	clientIP := realip.FromRequest(r)
@@ -29,7 +29,7 @@ You can also pass multiple CIDR blocks which are blocks of your proxies.
 ```go
 package main
 
-import "github.com/defabricated/realip"
+import "github.com/czlowiekenigma/realip"
 
 func (h *Handler) ServeIndexPage(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	clientIP := realip.FromRequest(r, net.ParseCIDR("169.254.0.0/16"))
