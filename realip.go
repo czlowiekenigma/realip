@@ -84,19 +84,24 @@ func isUnderCIDRBlocks(address string, blocks []*net.IPNet) (bool, error) {
 	return false, nil
 }
 
-// FromRequest return client's real public IP address from http request headers.
+// FromRequest return client's real public IP address from http request
 func FromRequest(r *http.Request, trustedProxies... *net.IPNet) string {
 	// Fetch header value
 	xRealIP := r.Header.Get("X-Real-Ip")
 	xForwardedFor := r.Header.Get("X-Forwarded-For")
+	remoteAddr := r.RemoteAddr
+	return FromHeaders(xRealIP, xForwardedFor, remoteAddr, trustedProxies...)
+}
 
+// FromHeaders return client's real public IP Address from http request headers.
+func FromHeaders(xRealIP string, xForwardedFor string, remoteAddr string, trustedProxies... *net.IPNet) string {
 	// If there are colon in remote address, remove the port number
 	// otherwise, return remote address as is
 	var remoteIP string
-	if strings.ContainsRune(r.RemoteAddr, ':') {
-		remoteIP, _, _ = net.SplitHostPort(r.RemoteAddr)
+	if strings.ContainsRune(remoteAddr, ':') {
+		remoteIP, _, _ = net.SplitHostPort(remoteAddr)
 	} else {
-		remoteIP = r.RemoteAddr
+		remoteIP = remoteAddr
 	}
 	isPrivate, err := isPrivateAddress(remoteIP)
 	isCloudFlare, err := isCloudFlareAddress(remoteIP)
